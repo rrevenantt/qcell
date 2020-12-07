@@ -1,3 +1,4 @@
+use crate::data_ptr_ne;
 use std::cell::{Cell, UnsafeCell};
 use std::marker::PhantomData;
 
@@ -67,7 +68,7 @@ impl<'id> LCellOwner<'id> {
     /// `LCell` instances can be borrowed immutably at the same time
     /// from the same owner.
     #[inline]
-    pub fn ro<'a, T>(&'a self, lc: &'a LCell<'id, T>) -> &'a T {
+    pub fn ro<'a, T: ?Sized>(&'a self, lc: &'a LCell<'id, T>) -> &'a T {
         unsafe { &*lc.value.get() }
     }
 
@@ -76,20 +77,20 @@ impl<'id> LCellOwner<'id> {
     /// call.  The returned reference must go out of scope before
     /// another can be borrowed.
     #[inline]
-    pub fn rw<'a, T>(&'a mut self, lc: &'a LCell<'id, T>) -> &'a mut T {
+    pub fn rw<'a, T: ?Sized>(&'a mut self, lc: &'a LCell<'id, T>) -> &'a mut T {
         unsafe { &mut *lc.value.get() }
     }
 
     /// Borrow contents of two `LCell` instances mutably.  Panics if
     /// the two `LCell` instances point to the same memory.
     #[inline]
-    pub fn rw2<'a, T, U>(
+    pub fn rw2<'a, T: ?Sized, U: ?Sized>(
         &'a mut self,
         lc1: &'a LCell<'id, T>,
         lc2: &'a LCell<'id, U>,
     ) -> (&'a mut T, &'a mut U) {
         assert!(
-            lc1 as *const _ as usize != lc2 as *const _ as usize,
+            data_ptr_ne(lc1, lc2),
             "Illegal to borrow same LCell twice with rw2()"
         );
         unsafe { (&mut *lc1.value.get(), &mut *lc2.value.get()) }
@@ -98,16 +99,14 @@ impl<'id> LCellOwner<'id> {
     /// Borrow contents of three `LCell` instances mutably.  Panics if
     /// any pair of `LCell` instances point to the same memory.
     #[inline]
-    pub fn rw3<'a, T, U, V>(
+    pub fn rw3<'a, T: ?Sized, U: ?Sized, V: ?Sized>(
         &'a mut self,
         lc1: &'a LCell<'id, T>,
         lc2: &'a LCell<'id, U>,
         lc3: &'a LCell<'id, V>,
     ) -> (&'a mut T, &'a mut U, &'a mut V) {
         assert!(
-            (lc1 as *const _ as usize != lc2 as *const _ as usize)
-                && (lc2 as *const _ as usize != lc3 as *const _ as usize)
-                && (lc3 as *const _ as usize != lc1 as *const _ as usize),
+            data_ptr_ne(lc1, lc2) && data_ptr_ne(lc2, lc3) && data_ptr_ne(lc3, lc1),
             "Illegal to borrow same LCell twice with rw3()"
         );
         unsafe {
@@ -130,7 +129,7 @@ impl<'id> LCellOwner<'id> {
 /// See also [crate documentation](index.html).
 ///
 /// [`LCellOwner`]: struct.LCellOwner.html
-pub struct LCell<'id, T> {
+pub struct LCell<'id, T: ?Sized> {
     _id: Id<'id>,
     value: UnsafeCell<T>,
 }
@@ -165,7 +164,7 @@ impl<'id, T> LCell<'id, T> {
 // The way these types let you access T concurrently is the same,
 // even though the locking mechanisms are different.
 unsafe impl<'id> Sync for LCellOwner<'id> {}
-unsafe impl<'id, T: Send + Sync> Sync for LCell<'id, T> {}
+unsafe impl<'id, T: Send + Sync + ?Sized> Sync for LCell<'id, T> {}
 
 #[cfg(test)]
 mod tests {

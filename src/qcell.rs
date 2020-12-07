@@ -1,3 +1,4 @@
+use crate::data_ptr_ne;
 use once_cell::sync::Lazy;
 use std::cell::UnsafeCell;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -181,7 +182,7 @@ impl QCellOwner {
     /// `QCell` instances can be borrowed immutably at the same time
     /// from the same owner.  Panics if the `QCell` is not owned by
     /// this `QCellOwner`.
-    pub fn ro<'a, T>(&'a self, qc: &'a QCell<T>) -> &'a T {
+    pub fn ro<'a, T: ?Sized>(&'a self, qc: &'a QCell<T>) -> &'a T {
         assert_eq!(qc.owner, self.id, "QCell accessed with incorrect owner");
         unsafe { &*qc.value.get() }
     }
@@ -191,7 +192,7 @@ impl QCellOwner {
     /// call.  The returned reference must go out of scope before
     /// another can be borrowed.  Panics if the `QCell` is not owned
     /// by this `QCellOwner`.
-    pub fn rw<'a, T>(&'a mut self, qc: &'a QCell<T>) -> &'a mut T {
+    pub fn rw<'a, T: ?Sized>(&'a mut self, qc: &'a QCell<T>) -> &'a mut T {
         assert_eq!(qc.owner, self.id, "QCell accessed with incorrect owner");
         unsafe { &mut *qc.value.get() }
     }
@@ -199,15 +200,15 @@ impl QCellOwner {
     /// Borrow contents of two `QCell` instances mutably.  Panics if
     /// the two `QCell` instances point to the same memory.  Panics if
     /// either `QCell` is not owned by this `QCellOwner`.
-    pub fn rw2<'a, T, U>(
+    pub fn rw2<'a, T: ?Sized, U: ?Sized>(
         &'a mut self,
         qc1: &'a QCell<T>,
         qc2: &'a QCell<U>,
     ) -> (&'a mut T, &'a mut U) {
         assert_eq!(qc1.owner, self.id, "QCell accessed with incorrect owner");
         assert_eq!(qc2.owner, self.id, "QCell accessed with incorrect owner");
-        assert_ne!(
-            qc1 as *const _ as usize, qc2 as *const _ as usize,
+        assert!(
+            data_ptr_ne(qc1, qc2),
             "Illegal to borrow same QCell twice with rw2()"
         );
         unsafe { (&mut *qc1.value.get(), &mut *qc2.value.get()) }
@@ -216,7 +217,7 @@ impl QCellOwner {
     /// Borrow contents of three `QCell` instances mutably.  Panics if
     /// any pair of `QCell` instances point to the same memory.
     /// Panics if any `QCell` is not owned by this `QCellOwner`.
-    pub fn rw3<'a, T, U, V>(
+    pub fn rw3<'a, T: ?Sized, U: ?Sized, V: ?Sized>(
         &'a mut self,
         qc1: &'a QCell<T>,
         qc2: &'a QCell<U>,
@@ -226,9 +227,7 @@ impl QCellOwner {
         assert_eq!(qc2.owner, self.id, "QCell accessed with incorrect owner");
         assert_eq!(qc3.owner, self.id, "QCell accessed with incorrect owner");
         assert!(
-            (qc1 as *const _ as usize != qc2 as *const _ as usize)
-                && (qc2 as *const _ as usize != qc3 as *const _ as usize)
-                && (qc3 as *const _ as usize != qc1 as *const _ as usize),
+            data_ptr_ne(qc1, qc2) && data_ptr_ne(qc2, qc3) && data_ptr_ne(qc3, qc1),
             "Illegal to borrow same QCell twice with rw3()"
         );
         unsafe {
@@ -249,7 +248,7 @@ impl QCellOwner {
 /// documentation](index.html).
 ///
 /// [`QCellOwner`]: struct.QCellOwner.html
-pub struct QCell<T> {
+pub struct QCell<T: ?Sized> {
     owner: OwnerID,
     value: UnsafeCell<T>,
 }
@@ -270,7 +269,7 @@ pub struct QCell<T> {
 // as those of std::sync::RwLock<T>. That's not a coincidence.
 // The way these types let you access T concurrently is the same,
 // even though the locking mechanisms are different.
-unsafe impl<T: Send + Sync> Sync for QCell<T> {}
+unsafe impl<T: Send + Sync + ?Sized> Sync for QCell<T> {}
 
 impl<T> QCell<T> {
     /// Create a new `QCell` owned for borrowing purposes by the given

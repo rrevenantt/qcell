@@ -333,6 +333,11 @@ pub use crate::tcell::TCellOwner;
 pub use crate::tlcell::TLCell;
 pub use crate::tlcell::TLCellOwner;
 
+// Regular pointer inequality but for DSTs it only compares data pointer.
+fn data_ptr_ne<T: ?Sized, U: ?Sized>(c1: *const T, c2: *const U) -> bool {
+    c1 as *const _ as *const () as usize != c2 as *const _ as *const () as usize
+}
+
 // The compile-tests double-check that the compile_fail tests in the
 // doctests actually fail for the reason intended, not for some other
 // reason.  This is most useful to check when making changes to the

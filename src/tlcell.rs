@@ -1,3 +1,4 @@
+use crate::data_ptr_ne;
 use std::any::TypeId;
 use std::cell::UnsafeCell;
 use std::collections::HashSet;
@@ -56,7 +57,7 @@ impl<Q: 'static> TLCellOwner<Q> {
     /// `TLCell` instances can be borrowed immutably at the same time
     /// from the same owner.
     #[inline]
-    pub fn ro<'a, T>(&'a self, tc: &'a TLCell<Q, T>) -> &'a T {
+    pub fn ro<'a, T: ?Sized>(&'a self, tc: &'a TLCell<Q, T>) -> &'a T {
         unsafe { &*tc.value.get() }
     }
 
@@ -65,20 +66,20 @@ impl<Q: 'static> TLCellOwner<Q> {
     /// call.  The returned reference must go out of scope before
     /// another can be borrowed.
     #[inline]
-    pub fn rw<'a, T>(&'a mut self, tc: &'a TLCell<Q, T>) -> &'a mut T {
+    pub fn rw<'a, T: ?Sized>(&'a mut self, tc: &'a TLCell<Q, T>) -> &'a mut T {
         unsafe { &mut *tc.value.get() }
     }
 
     /// Borrow contents of two `TLCell` instances mutably.  Panics if
     /// the two `TLCell` instances point to the same memory.
     #[inline]
-    pub fn rw2<'a, T, U>(
+    pub fn rw2<'a, T: ?Sized, U: ?Sized>(
         &'a mut self,
         tc1: &'a TLCell<Q, T>,
         tc2: &'a TLCell<Q, U>,
     ) -> (&'a mut T, &'a mut U) {
         assert!(
-            tc1 as *const _ as usize != tc2 as *const _ as usize,
+            data_ptr_ne(tc1, tc2),
             "Illegal to borrow same TLCell twice with rw2()"
         );
         unsafe { (&mut *tc1.value.get(), &mut *tc2.value.get()) }
@@ -87,16 +88,14 @@ impl<Q: 'static> TLCellOwner<Q> {
     /// Borrow contents of three `TLCell` instances mutably.  Panics if
     /// any pair of `TLCell` instances point to the same memory.
     #[inline]
-    pub fn rw3<'a, T, U, V>(
+    pub fn rw3<'a, T: ?Sized, U: ?Sized, V: ?Sized>(
         &'a mut self,
         tc1: &'a TLCell<Q, T>,
         tc2: &'a TLCell<Q, U>,
         tc3: &'a TLCell<Q, V>,
     ) -> (&'a mut T, &'a mut U, &'a mut V) {
         assert!(
-            (tc1 as *const _ as usize != tc2 as *const _ as usize)
-                && (tc2 as *const _ as usize != tc3 as *const _ as usize)
-                && (tc3 as *const _ as usize != tc1 as *const _ as usize),
+            data_ptr_ne(tc1, tc2) && data_ptr_ne(tc2, tc3) && data_ptr_ne(tc3, tc1),
             "Illegal to borrow same TLCell twice with rw3()"
         );
         unsafe {
@@ -122,7 +121,7 @@ impl<Q: 'static> TLCellOwner<Q> {
 /// See also [crate documentation](index.html).
 ///
 /// [`TLCellOwner`]: struct.TLCellOwner.html
-pub struct TLCell<Q, T> {
+pub struct TLCell<Q, T: ?Sized> {
     // Use *const to disable Send and Sync
     owner: PhantomData<*const Q>,
     value: UnsafeCell<T>,
@@ -151,7 +150,7 @@ impl<Q, T> TLCell<Q, T> {
 // TLCellOwner can no longer give access to the TLCell's contents since
 // TLCellOwner is !Send + !Sync. Only the TLCellOwner of the new thread
 // can give access to this TLCell's contents now.
-unsafe impl<Q, T: Send> Send for TLCell<Q, T> {}
+unsafe impl<Q, T: Send + ?Sized> Send for TLCell<Q, T> {}
 
 #[cfg(test)]
 mod tests {

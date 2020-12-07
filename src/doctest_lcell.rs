@@ -313,3 +313,51 @@
 //!     }).unwrap();
 //! });
 //! ```
+//!
+//! Converting to trait object works
+//!
+//! ```
+//!# use qcell::{LCell, LCellOwner};
+//!# use std::fmt::Debug;
+//!
+//! trait Trait{
+//!     fn inc(&mut self);
+//!     fn get(&self) -> i32;
+//! }
+//! impl Trait for i32{
+//!     fn inc(&mut self) { *self += 1; }
+//!     fn get(&self) -> i32 { *self }
+//! }
+//!
+//! LCellOwner::scope(|mut owner| {
+//!    let cell = owner.cell(100i32);
+//!    owner.rw(&cell as &LCell<dyn Trait>).inc();
+//!    assert_eq!(101, *owner.ro(&cell));
+//!    assert_eq!(101, owner.ro(&cell as &LCell<dyn Trait>).get());
+//!    let cell2 = owner.cell(100i32);
+//!    let (c1, mut c2) = owner.rw2(&cell as &LCell<dyn Trait>, &cell2 as &LCell<dyn Trait>);
+//!    c2.inc();
+//!    assert_eq!(101, *owner.ro(&cell2));
+//! })
+//! ```
+//!
+//! But should still fail multiple borrow of the same cell even through trait object
+//!
+//! ```should_panic
+//!# use qcell::{LCell, LCellOwner};
+//!# use std::fmt::Debug;
+//!
+//! trait Trait{
+//!     fn inc(&mut self);
+//!     fn get(&self) -> i32;
+//! }
+//! impl Trait for i32{
+//!     fn inc(&mut self) { *self += 1; }
+//!     fn get(&self) -> i32 { *self }
+//! }
+//!
+//! LCellOwner::scope(|mut owner| {
+//!    let cell = owner.cell(100i32);
+//!    let (a, b) = owner.rw2(&cell, &cell as &LCell<dyn Trait>);
+//! })
+//! ```

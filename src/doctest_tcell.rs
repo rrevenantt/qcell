@@ -338,3 +338,55 @@
 //!     assert_eq!(100, **owner.ro(&cell));
 //! }).join();
 //! ```
+//!
+//! Converting to trait object works
+//!
+//! ```
+//!# use qcell::{TCell, TCellOwner};
+//!# use std::fmt::Debug;
+//!# struct Marker;
+//! type ACellOwner = TCellOwner<Marker>;
+//! type ACell<T> = TCell<Marker, T>;
+//!
+//! trait Trait{
+//!     fn inc(&mut self);
+//!     fn get(&self) -> i32;
+//! }
+//! impl Trait for i32{
+//!     fn inc(&mut self) { *self += 1; }
+//!     fn get(&self) -> i32 { *self }
+//! }
+//!
+//! let mut owner = ACellOwner::new();
+//! let cell = ACell::new(100i32);
+//! owner.rw(&cell as &ACell<dyn Trait>).inc();
+//! assert_eq!(101, *owner.ro(&cell));
+//! assert_eq!(101, owner.ro(&cell as &ACell<dyn Trait>).get());
+//! let cell2 = ACell::new(100i32);
+//! let (c1, mut c2) = owner.rw2(&cell as &ACell<dyn Trait>, &cell2 as &ACell<dyn Trait>);
+//! c2.inc();
+//! assert_eq!(101, *owner.ro(&cell2));
+//! ```
+//!
+//! But should still fail multiple borrow of the same cell even through trait object
+//!
+//! ```should_panic
+//!# use qcell::{TCell, TCellOwner};
+//!# use std::fmt::Debug;
+//!# struct Marker;
+//! type ACellOwner = TCellOwner<Marker>;
+//! type ACell<T> = TCell<Marker, T>;
+//!
+//! trait Trait{
+//!     fn inc(&mut self);
+//!     fn get(&self) -> i32;
+//! }
+//! impl Trait for i32{
+//!     fn inc(&mut self) { *self += 1; }
+//!     fn get(&self) -> i32 { *self }
+//! }
+//!
+//! let mut owner = ACellOwner::new();
+//! let cell = ACell::new(100i32);
+//! let (a, b) = owner.rw2(&cell, &cell as &ACell<dyn Trait>);
+//! ```
